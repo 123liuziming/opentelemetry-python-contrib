@@ -560,8 +560,7 @@ def _is_streaming_response():
             flask.request, "response"
         ):
             return (
-                hasattr(flask.request, "response")
-                and flask.request.response
+                flask.request.response
                 and hasattr(flask.request.response, "stream")
                 and flask.request.response.stream
             )
