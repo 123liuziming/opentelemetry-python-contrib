@@ -551,6 +551,25 @@ def _wrapped_before_request(
     return _before_request
 
 
+def _is_streaming_response():
+    """Check if the current request has a streaming response in Flask 3.1+."""
+    if not (_IS_FLASK_31_PLUS and sys.version_info >= (3, 10)):
+        return False
+    try:
+        if hasattr(flask, "request") and hasattr(
+            flask.request, "response"
+        ):
+            return (
+                hasattr(flask.request, "response")
+                and flask.request.response
+                and hasattr(flask.request.response, "stream")
+                and flask.request.response.stream
+            )
+    except (RuntimeError, AttributeError):
+        pass
+    return False
+
+
 def _wrapped_teardown_request(
     excluded_urls=None,
 ):
@@ -580,32 +599,7 @@ def _wrapped_teardown_request(
             return
 
         try:
-            # For Flask 3.1+, check if this is a streaming response that might
-            # have already been cleaned up to prevent double cleanup
-            # Only check for streaming in Flask 3.1+ and Python 3.10+ to avoid interference with older versions
-            is_flask_31_plus = _IS_FLASK_31_PLUS and sys.version_info >= (
-                3,
-                10,
-            )
-
-            is_streaming = False
-            if is_flask_31_plus:
-                try:
-                    # Additional safety check: verify we're in a Flask request context
-                    if hasattr(flask, "request") and hasattr(
-                        flask.request, "response"
-                    ):
-                        is_streaming = (
-                            hasattr(flask.request, "response")
-                            and flask.request.response
-                            and hasattr(flask.request.response, "stream")
-                            and flask.request.response.stream
-                        )
-                except (RuntimeError, AttributeError):
-                    # Not in a proper Flask request context, don't check for streaming
-                    is_streaming = False
-
-            if is_flask_31_plus and is_streaming:
+            if _is_streaming_response():
                 # For Flask 3.1+ streaming responses, ensure OpenTelemetry contexts are cleaned up
                 # This addresses the generator context leak issues documented by Logfire
                 # (open-telemetry/opentelemetry-python#2606)
